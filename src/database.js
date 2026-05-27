@@ -2,9 +2,21 @@ const { createClient } = require('@libsql/client');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 
+// Limpiar la URL por si tiene espacios o saltos de línea
+const rawUrl = (process.env.TURSO_URL || '').trim().replace(/\s+/g, '');
+const rawToken = (process.env.TURSO_TOKEN || '').trim().replace(/\s+/g, '');
+
+console.log('TURSO_URL recibida:', rawUrl ? rawUrl.substring(0, 40) + '...' : 'VACÍA');
+console.log('TURSO_TOKEN recibido:', rawToken ? 'OK ('+rawToken.length+' chars)' : 'VACÍO');
+
+if (!rawUrl) {
+  console.error('ERROR: TURSO_URL no está configurada en las variables de entorno');
+  process.exit(1);
+}
+
 const db = createClient({
-  url: process.env.TURSO_URL,
-  authToken: process.env.TURSO_TOKEN,
+  url: rawUrl,
+  authToken: rawToken,
 });
 
 async function run(sql, args=[]) {
@@ -104,7 +116,6 @@ async function initDB() {
     await run(sql);
   }
 
-  // Superadmin
   const sa = await get("SELECT id FROM users WHERE role = 'superadmin'");
   if (!sa) {
     const hash = bcrypt.hashSync('admin1234', 10);
