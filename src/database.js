@@ -1,209 +1,132 @@
-const Database = require('better-sqlite3');
+const { createClient } = require('@libsql/client');
 const bcrypt = require('bcryptjs');
-const path = require('path');
-const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../db/apuntoll.db');
-const dbDir = path.dirname(DB_PATH);
-if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+const db = createClient({
+  url: process.env.TURSO_URL,
+  authToken: process.env.TURSO_TOKEN,
+});
 
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-db.exec(`
-CREATE TABLE IF NOT EXISTS talleres (
-  id TEXT PRIMARY KEY,
-  nombre TEXT NOT NULL,
-  email TEXT NOT NULL,
-  telefono TEXT DEFAULT '',
-  direccion TEXT DEFAULT '',
-  nombre_dueno TEXT DEFAULT '',
-  dni_dueno TEXT DEFAULT '',
-  activo INTEGER DEFAULT 1,
-  pendiente INTEGER DEFAULT 0,
-  suscripcion_hasta TEXT DEFAULT '',
-  logo TEXT DEFAULT '',
-  color_fondo TEXT DEFAULT '#f0f0f0',
-  color_nav TEXT DEFAULT '#111111',
-  created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS users (
-  id TEXT PRIMARY KEY,
-  nombre TEXT NOT NULL,
-  email TEXT NOT NULL UNIQUE,
-  password TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'operario',
-  taller_id TEXT,
-  last_login TEXT,
-  created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS clientes (
-  id TEXT PRIMARY KEY,
-  taller_id TEXT NOT NULL,
-  nombre TEXT NOT NULL,
-  telefono TEXT DEFAULT '',
-  email TEXT DEFAULT '',
-  dni TEXT DEFAULT '',
-  direccion TEXT DEFAULT '',
-  patentes TEXT DEFAULT '',
-  created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS vehiculos (
-  id TEXT PRIMARY KEY,
-  taller_id TEXT NOT NULL,
-  patente TEXT NOT NULL,
-  marca TEXT DEFAULT '',
-  modelo TEXT DEFAULT '',
-  anio TEXT DEFAULT '',
-  cliente_id TEXT DEFAULT '',
-  ultimo_km INTEGER DEFAULT 0,
-  proximo_aceite INTEGER DEFAULT 0,
-  created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS ingresos (
-  id TEXT PRIMARY KEY,
-  taller_id TEXT NOT NULL,
-  patente TEXT NOT NULL,
-  fecha TEXT NOT NULL,
-  marca TEXT DEFAULT '',
-  modelo TEXT DEFAULT '',
-  anio TEXT DEFAULT '',
-  km INTEGER DEFAULT 0,
-  cliente_id TEXT DEFAULT '',
-  estado TEXT DEFAULT 'bueno',
-  aceite TEXT DEFAULT 'ok',
-  refrigerante TEXT DEFAULT 'ok',
-  frenos TEXT DEFAULT 'ok',
-  trabajos TEXT NOT NULL,
-  obs TEXT DEFAULT '',
-  fotos TEXT DEFAULT '[]',
-  created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS ordenes (
-  id TEXT PRIMARY KEY,
-  taller_id TEXT NOT NULL,
-  numero TEXT NOT NULL,
-  patente TEXT NOT NULL,
-  fecha TEXT NOT NULL,
-  tecnico TEXT DEFAULT '',
-  estado TEXT DEFAULT 'abierta',
-  trabajos TEXT NOT NULL,
-  items_mano_obra TEXT DEFAULT '[]',
-  items_repuestos_taller TEXT DEFAULT '[]',
-  items_repuestos_externos TEXT DEFAULT '[]',
-  checklist TEXT DEFAULT '{}',
-  km_egreso INTEGER DEFAULT 0,
-  mano_obra REAL DEFAULT 0,
-  costo_repuestos_taller REAL DEFAULT 0,
-  costo_repuestos_externos REAL DEFAULT 0,
-  total REAL DEFAULT 0,
-  proximo_aceite INTEGER DEFAULT 0,
-  aceite_usado TEXT DEFAULT '',
-  obs TEXT DEFAULT '',
-  created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS presupuestos (
-  id TEXT PRIMARY KEY,
-  taller_id TEXT NOT NULL,
-  numero TEXT NOT NULL,
-  patente TEXT NOT NULL,
-  fecha TEXT NOT NULL,
-  cliente_id TEXT DEFAULT '',
-  items TEXT DEFAULT '[]',
-  total REAL DEFAULT 0,
-  obs TEXT DEFAULT '',
-  created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS movimientos (
-  id TEXT PRIMARY KEY,
-  taller_id TEXT NOT NULL,
-  tipo TEXT NOT NULL,
-  fecha TEXT NOT NULL,
-  categoria TEXT DEFAULT 'otros',
-  monto REAL NOT NULL,
-  descripcion TEXT DEFAULT '',
-  orden_id TEXT DEFAULT '',
-  es_fijo INTEGER DEFAULT 0,
-  created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS gastos_fijos (
-  id TEXT PRIMARY KEY,
-  taller_id TEXT NOT NULL,
-  nombre TEXT NOT NULL,
-  monto REAL NOT NULL,
-  categoria TEXT DEFAULT 'otros',
-  created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS movimientos_admin (
-  id TEXT PRIMARY KEY,
-  tipo TEXT NOT NULL,
-  fecha TEXT NOT NULL,
-  categoria TEXT DEFAULT 'suscripcion',
-  monto REAL NOT NULL,
-  descripcion TEXT DEFAULT '',
-  taller_id TEXT DEFAULT '',
-  created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS alertas (
-  id TEXT PRIMARY KEY,
-  taller_id TEXT NOT NULL,
-  patente TEXT NOT NULL,
-  tipo TEXT DEFAULT 'fecha',
-  fecha_alerta TEXT DEFAULT '',
-  km_alerta INTEGER DEFAULT 0,
-  aceite_usado TEXT DEFAULT '',
-  filtros_cambiados TEXT DEFAULT '',
-  notas TEXT DEFAULT '',
-  resuelta INTEGER DEFAULT 0,
-  created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS guia_km (
-  id TEXT PRIMARY KEY,
-  taller_id TEXT NOT NULL,
-  tipo TEXT NOT NULL,
-  km INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS chat_mensajes (
-  id TEXT PRIMARY KEY,
-  taller_id TEXT NOT NULL,
-  remitente_id TEXT NOT NULL,
-  remitente_nombre TEXT NOT NULL,
-  remitente_role TEXT NOT NULL,
-  mensaje TEXT NOT NULL,
-  leido INTEGER DEFAULT 0,
-  created_at TEXT
-);
-`);
-
-// Migraciones seguras
-const migraciones = [
-  `ALTER TABLE talleres ADD COLUMN nombre_dueno TEXT DEFAULT ''`,
-  `ALTER TABLE talleres ADD COLUMN dni_dueno TEXT DEFAULT ''`,
-  `ALTER TABLE talleres ADD COLUMN pendiente INTEGER DEFAULT 0`,
-  `ALTER TABLE talleres ADD COLUMN suscripcion_hasta TEXT DEFAULT ''`,
-  `ALTER TABLE talleres ADD COLUMN logo TEXT DEFAULT ''`,
-  `ALTER TABLE talleres ADD COLUMN color_fondo TEXT DEFAULT '#f0f0f0'`,
-  `ALTER TABLE talleres ADD COLUMN color_nav TEXT DEFAULT '#111111'`,
-  `ALTER TABLE ordenes ADD COLUMN items_mano_obra TEXT DEFAULT '[]'`,
-  `ALTER TABLE ordenes ADD COLUMN items_repuestos_taller TEXT DEFAULT '[]'`,
-  `ALTER TABLE ordenes ADD COLUMN items_repuestos_externos TEXT DEFAULT '[]'`,
-  `ALTER TABLE ordenes ADD COLUMN checklist TEXT DEFAULT '{}'`,
-  `ALTER TABLE ordenes ADD COLUMN proximo_aceite INTEGER DEFAULT 0`,
-  `ALTER TABLE ordenes ADD COLUMN aceite_usado TEXT DEFAULT ''`,
-  `ALTER TABLE ordenes ADD COLUMN costo_repuestos_taller REAL DEFAULT 0`,
-  `ALTER TABLE ordenes ADD COLUMN costo_repuestos_externos REAL DEFAULT 0`,
-  `ALTER TABLE movimientos ADD COLUMN es_fijo INTEGER DEFAULT 0`,
-];
-migraciones.forEach(m => { try { db.exec(m); } catch(e) {} });
-
-// Superadmin
-const superadmin = db.prepare("SELECT id FROM users WHERE role = 'superadmin'").get();
-if (!superadmin) {
-  const hash = bcrypt.hashSync('admin1234', 10);
-  db.prepare("INSERT INTO users (id, nombre, email, password, role, taller_id, created_at) VALUES (?,?,?,?,?,?,?)")
-    .run(uuidv4(), 'Super Admin', 'admin@apuntoll.com', hash, 'superadmin', null, new Date().toISOString());
-  console.log('✓ Superadmin creado: admin@apuntoll.com / admin1234');
+async function run(sql, args=[]) {
+  return db.execute({ sql, args });
 }
-module.exports = db;
+
+async function get(sql, args=[]) {
+  const r = await db.execute({ sql, args });
+  return r.rows[0] || null;
+}
+
+async function all(sql, args=[]) {
+  const r = await db.execute({ sql, args });
+  return r.rows;
+}
+
+async function initDB() {
+  const tablas = [
+    `CREATE TABLE IF NOT EXISTS talleres (
+      id TEXT PRIMARY KEY, nombre TEXT NOT NULL, email TEXT NOT NULL,
+      telefono TEXT DEFAULT '', direccion TEXT DEFAULT '',
+      nombre_dueno TEXT DEFAULT '', dni_dueno TEXT DEFAULT '',
+      activo INTEGER DEFAULT 1, pendiente INTEGER DEFAULT 0,
+      suscripcion_hasta TEXT DEFAULT '', logo TEXT DEFAULT '',
+      color_fondo TEXT DEFAULT '#f0f0f0', color_nav TEXT DEFAULT '#111111',
+      created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY, nombre TEXT NOT NULL, email TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'operario',
+      taller_id TEXT, last_login TEXT, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS clientes (
+      id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, nombre TEXT NOT NULL,
+      telefono TEXT DEFAULT '', email TEXT DEFAULT '', dni TEXT DEFAULT '',
+      direccion TEXT DEFAULT '', patentes TEXT DEFAULT '', created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS vehiculos (
+      id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, patente TEXT NOT NULL,
+      marca TEXT DEFAULT '', modelo TEXT DEFAULT '', anio TEXT DEFAULT '',
+      cliente_id TEXT DEFAULT '', ultimo_km INTEGER DEFAULT 0,
+      proximo_aceite INTEGER DEFAULT 0, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS ingresos (
+      id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, numero INTEGER DEFAULT 0,
+      patente TEXT NOT NULL, fecha TEXT NOT NULL, marca TEXT DEFAULT '',
+      modelo TEXT DEFAULT '', anio TEXT DEFAULT '', km INTEGER DEFAULT 0,
+      cliente_id TEXT DEFAULT '', estado TEXT DEFAULT 'bueno',
+      aceite TEXT DEFAULT 'ok', refrigerante TEXT DEFAULT 'ok',
+      frenos TEXT DEFAULT 'ok', liq_frenos TEXT DEFAULT 'ok',
+      trabajos TEXT NOT NULL, obs TEXT DEFAULT '', fotos TEXT DEFAULT '[]',
+      created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS ordenes (
+      id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, numero INTEGER DEFAULT 0,
+      patente TEXT NOT NULL, fecha TEXT NOT NULL, tecnico TEXT DEFAULT '',
+      estado TEXT DEFAULT 'abierta', trabajos TEXT NOT NULL,
+      items_mano_obra TEXT DEFAULT '[]', items_repuestos_taller TEXT DEFAULT '[]',
+      items_repuestos_externos TEXT DEFAULT '[]', checklist TEXT DEFAULT '{}',
+      km_egreso INTEGER DEFAULT 0, mano_obra REAL DEFAULT 0,
+      costo_repuestos_taller REAL DEFAULT 0, costo_repuestos_externos REAL DEFAULT 0,
+      total REAL DEFAULT 0, proximo_aceite INTEGER DEFAULT 0,
+      aceite_usado TEXT DEFAULT '', obs TEXT DEFAULT '', created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS presupuestos (
+      id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, numero INTEGER DEFAULT 0,
+      patente TEXT NOT NULL, fecha TEXT NOT NULL, fecha_caducidad TEXT DEFAULT '',
+      cliente_id TEXT DEFAULT '', descripcion TEXT DEFAULT '',
+      items TEXT DEFAULT '[]', total REAL DEFAULT 0, obs TEXT DEFAULT '',
+      created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS movimientos (
+      id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, tipo TEXT NOT NULL,
+      fecha TEXT NOT NULL, categoria TEXT DEFAULT 'otros', monto REAL NOT NULL,
+      descripcion TEXT DEFAULT '', orden_id TEXT DEFAULT '',
+      es_fijo INTEGER DEFAULT 0, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS gastos_fijos (
+      id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, nombre TEXT NOT NULL,
+      monto REAL NOT NULL, categoria TEXT DEFAULT 'otros',
+      periodo_tipo TEXT DEFAULT 'mensual', periodo_valor INTEGER DEFAULT 1,
+      proxima_fecha TEXT DEFAULT '', created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS movimientos_admin (
+      id TEXT PRIMARY KEY, tipo TEXT NOT NULL, fecha TEXT NOT NULL,
+      categoria TEXT DEFAULT 'suscripcion', monto REAL NOT NULL,
+      descripcion TEXT DEFAULT '', taller_id TEXT DEFAULT '', created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS alertas (
+      id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, patente TEXT NOT NULL,
+      telefono_dueno TEXT DEFAULT '', tipo TEXT DEFAULT 'fecha',
+      fecha_alerta TEXT DEFAULT '', km_alerta INTEGER DEFAULT 0,
+      aceite_usado TEXT DEFAULT '', filtros_cambiados TEXT DEFAULT '',
+      notas TEXT DEFAULT '', resuelta INTEGER DEFAULT 0, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS guia_km (
+      id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, tipo TEXT NOT NULL, km INTEGER NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS chat_mensajes (
+      id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, remitente_id TEXT NOT NULL,
+      remitente_nombre TEXT NOT NULL, remitente_role TEXT NOT NULL,
+      mensaje TEXT NOT NULL, leido INTEGER DEFAULT 0, created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS contadores (
+      id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, tipo TEXT NOT NULL,
+      valor INTEGER DEFAULT 0)`,
+  ];
+
+  for (const sql of tablas) {
+    await run(sql);
+  }
+
+  // Superadmin
+  const sa = await get("SELECT id FROM users WHERE role = 'superadmin'");
+  if (!sa) {
+    const hash = bcrypt.hashSync('admin1234', 10);
+    await run(
+      'INSERT INTO users (id,nombre,email,password,role,taller_id,created_at) VALUES (?,?,?,?,?,?,?)',
+      [uuidv4(), 'Super Admin', 'admin@apuntoll.com', hash, 'superadmin', null, new Date().toISOString()]
+    );
+    console.log('Superadmin creado');
+  }
+
+  console.log('DB Turso inicializada OK');
+}
+
+async function nextNum(tallerId, tipo) {
+  const c = await get('SELECT valor FROM contadores WHERE taller_id=? AND tipo=?', [tallerId, tipo]);
+  if (!c) {
+    await run('INSERT INTO contadores (id,taller_id,tipo,valor) VALUES (?,?,?,1)', [uuidv4(), tallerId, tipo]);
+    return 1;
+  }
+  const next = (c.valor || 0) + 1;
+  await run('UPDATE contadores SET valor=? WHERE taller_id=? AND tipo=?', [next, tallerId, tipo]);
+  return next;
+}
+
+module.exports = { db, run, get, all, initDB, nextNum };
