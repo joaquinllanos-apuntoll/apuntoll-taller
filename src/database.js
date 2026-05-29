@@ -5,12 +5,8 @@ const { v4: uuidv4 } = require('uuid');
 const rawUrl = (process.env.TURSO_URL || '').trim().replace(/\s+/g, '');
 const rawToken = (process.env.TURSO_TOKEN || '').trim().replace(/\s+/g, '');
 
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('Todas las vars:', Object.keys(process.env).filter(k => k.startsWith('TURSO')));
-console.log('TURSO_URL:', rawUrl || 'VACÍA');
-
 if (!rawUrl) {
-  console.error('TURSO_URL no encontrada. Variables disponibles:', Object.keys(process.env).join(', '));
+  console.error('TURSO_URL no configurada');
   process.exit(1);
 }
 
@@ -22,7 +18,7 @@ async function all(sql, args=[]) { const r = await db.execute({ sql, args }); re
 
 async function initDB() {
   const tablas = [
-    `CREATE TABLE IF NOT EXISTS talleres (id TEXT PRIMARY KEY, nombre TEXT NOT NULL, email TEXT NOT NULL, telefono TEXT DEFAULT '', direccion TEXT DEFAULT '', nombre_dueno TEXT DEFAULT '', dni_dueno TEXT DEFAULT '', activo INTEGER DEFAULT 1, pendiente INTEGER DEFAULT 0, suscripcion_hasta TEXT DEFAULT '', logo TEXT DEFAULT '', color_fondo TEXT DEFAULT '#f0f0f0', color_nav TEXT DEFAULT '#111111', created_at TEXT)`,
+    `CREATE TABLE IF NOT EXISTS talleres (id TEXT PRIMARY KEY, nombre TEXT NOT NULL, email TEXT NOT NULL, telefono TEXT DEFAULT '', direccion TEXT DEFAULT '', nombre_dueno TEXT DEFAULT '', dni_dueno TEXT DEFAULT '', activo INTEGER DEFAULT 1, pendiente INTEGER DEFAULT 0, suscripcion_hasta TEXT DEFAULT '', suscripcion_monto REAL DEFAULT 0, logo TEXT DEFAULT '', color_fondo TEXT DEFAULT '#f0f0f0', color_nav TEXT DEFAULT '#111111', color_primario TEXT DEFAULT '#CC0000', created_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, nombre TEXT NOT NULL, email TEXT NOT NULL UNIQUE, password TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'operario', taller_id TEXT, last_login TEXT, created_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS clientes (id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, nombre TEXT NOT NULL, telefono TEXT DEFAULT '', email TEXT DEFAULT '', dni TEXT DEFAULT '', direccion TEXT DEFAULT '', patentes TEXT DEFAULT '', created_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS vehiculos (id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, patente TEXT NOT NULL, marca TEXT DEFAULT '', modelo TEXT DEFAULT '', anio TEXT DEFAULT '', cliente_id TEXT DEFAULT '', ultimo_km INTEGER DEFAULT 0, proximo_aceite INTEGER DEFAULT 0, created_at TEXT)`,
@@ -36,8 +32,17 @@ async function initDB() {
     `CREATE TABLE IF NOT EXISTS guia_km (id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, tipo TEXT NOT NULL, km INTEGER NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS chat_mensajes (id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, remitente_id TEXT NOT NULL, remitente_nombre TEXT NOT NULL, remitente_role TEXT NOT NULL, mensaje TEXT NOT NULL, leido INTEGER DEFAULT 0, created_at TEXT)`,
     `CREATE TABLE IF NOT EXISTS contadores (id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, tipo TEXT NOT NULL, valor INTEGER DEFAULT 0)`,
+    `CREATE TABLE IF NOT EXISTS turnos (id TEXT PRIMARY KEY, taller_id TEXT NOT NULL, fecha TEXT NOT NULL, hora TEXT NOT NULL, patente TEXT DEFAULT '', cliente_id TEXT DEFAULT '', descripcion TEXT NOT NULL, estado TEXT DEFAULT 'pendiente', obs TEXT DEFAULT '', created_at TEXT)`,
   ];
   for (const sql of tablas) await run(sql);
+
+  // Migraciones seguras
+  const migraciones = [
+    `ALTER TABLE talleres ADD COLUMN suscripcion_monto REAL DEFAULT 0`,
+    `ALTER TABLE talleres ADD COLUMN color_primario TEXT DEFAULT '#CC0000'`,
+  ];
+  for (const m of migraciones) { try { await run(m); } catch(e) {} }
+
   const sa = await get("SELECT id FROM users WHERE role = 'superadmin'");
   if (!sa) {
     const hash = bcrypt.hashSync('admin1234', 10);
