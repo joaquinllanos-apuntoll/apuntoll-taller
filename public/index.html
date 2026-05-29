@@ -1403,7 +1403,6 @@ async function savePerson(){
 }
 async function resetPerson(){ld(true);await api('PUT','/api/taller/personalizacion',{color_fondo:'#f5f5f5',color_nav:'#111111',color_primario:'#CC0000',logo:''});ld(false);TI=await api('GET','/api/taller/info');applyPersonalizacion();toast('Restaurado ✓');rPerson();}
 
-</script>
 
 // PDFs
 const { jsPDF } = window.jspdf;
