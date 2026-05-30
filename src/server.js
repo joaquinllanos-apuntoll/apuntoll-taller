@@ -383,33 +383,3 @@ initDB().then(()=>{
   console.error('Error iniciando DB:',e);
   process.exit(1);
 });
-
-// TURNOS
-app.get('/api/turnos', isTaller, async (req,res) => res.json(await all('SELECT t.*,c.nombre as cliente_nombre,c.telefono as cliente_tel FROM turnos t LEFT JOIN clientes c ON t.cliente_id=c.id WHERE t.taller_id=? ORDER BY t.fecha ASC,t.hora ASC',[req.session.tallerId])));
-app.post('/api/turnos', isTaller, async (req,res) => {
-  const {fecha,hora,patente,cliente_id,descripcion,obs} = req.body;
-  if(!fecha||!hora||!descripcion) return res.json({ok:false,error:'Faltan datos'});
-  await run('INSERT INTO turnos (id,taller_id,fecha,hora,patente,cliente_id,descripcion,estado,obs,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
-    [uuidv4(),req.session.tallerId,fecha,hora,patente||'',cliente_id||'',descripcion,'pendiente',obs||'',new Date().toISOString()]);
-  res.json({ok:true});
-});
-app.put('/api/turnos/:id', isTaller, async (req,res) => {
-  const {fecha,hora,patente,cliente_id,descripcion,estado,obs} = req.body;
-  await run('UPDATE turnos SET fecha=?,hora=?,patente=?,cliente_id=?,descripcion=?,estado=?,obs=? WHERE id=? AND taller_id=?',
-    [fecha,hora,patente||'',cliente_id||'',descripcion,estado||'pendiente',obs||'',req.params.id,req.session.tallerId]);
-  res.json({ok:true});
-});
-app.delete('/api/turnos/:id', isTaller, async (req,res) => {await run('DELETE FROM turnos WHERE id=? AND taller_id=?',[req.params.id,req.session.tallerId]);res.json({ok:true});});
-
-// RENOVAR SUSCRIPCION (admin)
-app.post('/api/admin/talleres/:id/renovar', isSA, async (req,res) => {
-  const {monto,suscripcion_hasta} = req.body;
-  const t = await get('SELECT * FROM talleres WHERE id=?',[req.params.id]);
-  if(!t) return res.json({ok:false,error:'No encontrado'});
-  await run('UPDATE talleres SET suscripcion_hasta=?,suscripcion_monto=? WHERE id=?',[suscripcion_hasta,parseFloat(monto)||0,req.params.id]);
-  if(monto && parseFloat(monto)>0) {
-    await run('INSERT INTO movimientos_admin (id,tipo,fecha,categoria,monto,descripcion,taller_id,created_at) VALUES (?,?,?,?,?,?,?,?)',
-      [uuidv4(),'ingreso',new Date().toISOString().split('T')[0],'suscripcion',parseFloat(monto),'Suscripción '+t.nombre,req.params.id,new Date().toISOString()]);
-  }
-  res.json({ok:true});
-});
