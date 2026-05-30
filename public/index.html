@@ -1602,7 +1602,7 @@ function pdfLinea(doc,y,label,val,W){
 function pdfSeccion(doc,y,titulo,color){
   const W=doc.internal.pageSize.getWidth();
   const col=color||getPDFColor();
-  doc.setFillColor(...col);doc.rect(14,y-4,W-28,8,'F');
+  doc.setFillColor(col[0],col[1],col[2]);doc.rect(14,y-4,W-28,8,'F');
   doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(255,255,255);
   doc.text(titulo,17,y+1);return y+9;
 }
@@ -1756,12 +1756,13 @@ async function genRecepcion(ingId){
     const xPos=fx2+(idx2%2)*colW;const yPos=fy2+Math.floor(idx2/2)*14;
     const isOk=val==='ok';const col=isOk?[29,158,117]:val==='bajo'?[239,159,39]:[200,50,50];
     // Checkbox visual
-    doc.setDrawColor(...col);doc.setFillColor(isOk?...col:[255,255,255]);
+    doc.setDrawColor(col[0],col[1],col[2]);
+    if(isOk){doc.setFillColor(col[0],col[1],col[2]);}else{doc.setFillColor(255,255,255);}
     doc.roundedRect(xPos,yPos-3.5,5,5,1,1,isOk?'FD':'D');
-    if(isOk){doc.setTextColor(255,255,255);doc.setFontSize(7);doc.setFont('helvetica','bold');doc.text('✓',xPos+1.5,yPos+0.5);}
+    if(isOk){doc.setTextColor(255,255,255);doc.setFontSize(7);doc.setFont('helvetica','bold');doc.text('v',xPos+1.2,yPos+0.5);}
     doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(30,30,30);
     doc.text(lbl,xPos+7,yPos);
-    doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(...col);
+    doc.setFont('helvetica','bold');doc.setFontSize(7);doc.setTextColor(col[0],col[1],col[2]);
     doc.text((val||'ok').toUpperCase(),xPos+7+doc.getTextWidth(lbl)+2,yPos);
     doc.setTextColor(30,30,30);
   });
