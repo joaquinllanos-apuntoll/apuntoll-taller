@@ -40,6 +40,7 @@ async function initDB() {
   const migraciones = [
     `ALTER TABLE talleres ADD COLUMN suscripcion_monto REAL DEFAULT 0`,
     `ALTER TABLE talleres ADD COLUMN color_primario TEXT DEFAULT '#CC0000'`,
+    `ALTER TABLE ordenes ADD COLUMN adelanto_cliente REAL DEFAULT 0`,
   ];
   for (const m of migraciones) { try { await run(m); } catch(e) {} }
 
