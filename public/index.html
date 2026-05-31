@@ -261,10 +261,14 @@ function showSec(s){
 
 // SUPERADMIN
 async function rAdmin(){
-  const mc=$('mc');mc.innerHTML=`<div class="pt">🏢 Panel de administración</div><div id="adm-c"></div>`;
-  const ts=await api('GET','/api/admin/talleres');
+  const mc=$('mc');
+  mc.innerHTML=`<div class="pt">🏢 Panel de administración</div><div id="adm-c"><div style="text-align:center;padding:40px;color:var(--t2)"><div class="sp" style="margin:0 auto 14px"></div>Cargando talleres...</div></div>`;
+  let ts=[];
+  try{ ts=await api('GET','/api/admin/talleres'); }catch(e){ ts=[]; }
+  if(!Array.isArray(ts))ts=[];
   const pend=ts.filter(t=>t.pendiente);
   const ac=$('adm-c');
+  if(!ac)return;
   ac.innerHTML=`
     <div class="sg">
       <div class="sc"><div class="sn">${ts.length}</div><div class="sl">Total talleres</div></div>
@@ -819,11 +823,16 @@ function getArr(k){return k==='itemsMO'?itemsMO:k==='itemsRT'?itemsRT:itemsRE;}
 function sumItems(arr){return arr.reduce((a,it)=>a+(parseFloat(it.precio)||0)*(parseFloat(it.cantidad)||1),0);}
 function recalcOT(){
   const mo=sumItems(itemsMO);const rt=sumItems(itemsRT);const re=sumItems(itemsRE);
-  const extra=parseFloat(($('ot-extra')||{value:0}).value)||0;const tot=mo+rt+re+extra;
+  const extra=parseFloat(($('ot-extra')||{value:0}).value)||0;
+  const adelanto=parseFloat(($('ot-adelanto')||$('eo-adelanto')||{value:0}).value)||0;
+  const tot=mo+rt+re+extra;
+  const saldo=Math.max(0,tot-adelanto);
   if($('ot-mo-total'))$('ot-mo-total').textContent=fm(mo);
   if($('ot-rt-total'))$('ot-rt-total').textContent=fm(rt);
   if($('ot-re-total'))$('ot-re-total').textContent=fm(re);
   if($('ot-total-disp'))$('ot-total-disp').textContent=fm(tot);
+  if($('ot-adelanto-disp'))$('ot-adelanto-disp').textContent=fm(adelanto);
+  if($('ot-saldo-disp'))$('ot-saldo-disp').textContent=fm(saldo);
 }
 
 // ORDENES
@@ -863,13 +872,20 @@ async function oTab(t,pat){
         <div class="ct" style="color:#8a4a00">📦 Repuestos externos — cliente</div><div id="items-re-c"></div>
       </div>
       <div style="margin-top:14px;background:#fff;border:2px solid var(--brd);border-radius:12px;padding:14px">
-        <div class="fg"><label>Monto adicional ($)</label><input type="number" id="ot-extra" placeholder="0" oninput="recalcOT()"></div>
+        <div class="fg2">
+          <div class="fg"><label>Monto adicional ($)</label><input type="number" id="ot-extra" placeholder="0" oninput="recalcOT()"></div>
+          <div class="fg"><label>Adelanto del cliente ($)</label><input type="number" id="ot-adelanto" placeholder="0" oninput="recalcOT()" style="border-color:#4CAF50"></div>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;text-align:center">
           <div style="background:#fff5f5;padding:10px;border-radius:9px"><div style="font-size:11px;color:var(--t2);font-weight:600">MANO DE OBRA</div><div style="font-weight:800;color:var(--g)" id="ot-mo-total">$0</div></div>
           <div style="background:#fff5f5;padding:10px;border-radius:9px"><div style="font-size:11px;color:var(--t2);font-weight:600">REP. TALLER</div><div style="font-weight:800;color:var(--g)" id="ot-rt-total">$0</div></div>
           <div style="background:#fff8f0;padding:10px;border-radius:9px"><div style="font-size:11px;color:var(--t2);font-weight:600">REP. EXTERNOS</div><div style="font-weight:800;color:#8a4a00" id="ot-re-total">$0</div></div>
         </div>
-        <div style="text-align:center;margin-top:12px;padding:12px;background:var(--g);border-radius:10px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div style="background:#e8f5e9;padding:10px;border-radius:9px;text-align:center"><div style="font-size:11px;color:#2e7d32;font-weight:600">ADELANTO CLIENTE</div><div style="font-weight:800;color:#2e7d32" id="ot-adelanto-disp">$0</div></div>
+          <div style="background:#fff3e0;padding:10px;border-radius:9px;text-align:center"><div style="font-size:11px;color:#e65100;font-weight:600">SALDO A COBRAR</div><div style="font-weight:800;color:#e65100" id="ot-saldo-disp">$0</div></div>
+        </div>
+        <div style="text-align:center;margin-top:10px;padding:12px;background:var(--g);border-radius:10px">
           <div style="font-size:11px;color:rgba(255,255,255,.8);font-weight:600">TOTAL</div>
           <div style="font-size:26px;font-weight:900;color:#fff" id="ot-total-disp">$0</div>
         </div>
@@ -927,6 +943,10 @@ async function verOT(id){
     ${re.length?`<div class="card" style="border-left:4px solid var(--am)"><div class="ct">📦 Repuestos cliente</div><table style="width:100%;font-size:13px;border-collapse:collapse">${re.map(it=>`<tr style="border-bottom:1px solid #f0f4f8"><td style="padding:6px">${it.desc}</td><td style="text-align:right;padding:6px">${it.cantidad||1} × ${fm(it.precio)} = <strong>${fm((it.cantidad||1)*it.precio)}</strong></td></tr>`).join('')}</table></div>`:''}
     ${chkMarcados.length?`<div class="card"><div class="ct">✅ Mantenimientos realizados</div><div style="display:flex;flex-wrap:wrap;gap:6px">${chkMarcados.map(k=>`<span class="bdg bv">✓ ${k}</span>`).join('')}</div></div>`:''}
     <div class="card" style="background:var(--g)"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:800;font-size:16px;color:rgba(255,255,255,.8)">TOTAL A COBRAR</span><span style="font-size:28px;font-weight:900;color:#fff">${fm(o.total)}</span></div></div>
+    ${o.adelanto_cliente>0?`<div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="background:#e8f5e9;padding:12px;border-radius:9px;text-align:center"><div style="font-size:11px;color:#2e7d32;font-weight:700">ADELANTO CLIENTE</div><div style="font-size:20px;font-weight:900;color:#2e7d32">- ${fm(o.adelanto_cliente)}</div></div>
+      <div style="background:#fff3e0;padding:12px;border-radius:9px;text-align:center"><div style="font-size:11px;color:#e65100;font-weight:700">SALDO A COBRAR</div><div style="font-size:20px;font-weight:900;color:#e65100">${fm(Math.max(0,o.total-o.adelanto_cliente))}</div></div>
+    </div>`:''}
     ${o.obs?`<div class="card"><div class="ct">📝 Obs.</div><p style="font-size:13px">${o.obs}</p></div>`:''}
     <div class="btn-row">
       <button class="btn primary" onclick="genRem('${o.id}')">📄 Remito PDF</button>
@@ -953,7 +973,14 @@ async function editOTModal(id){
       <div style="margin-top:10px;background:#f8fafc;border-radius:10px;padding:12px;border:1px solid var(--brd)"><div class="ct">🔧 Mano de obra</div><div id="items-mo-c"></div></div>
       <div style="margin-top:8px;background:#fff5f5;border-radius:10px;padding:12px;border:1px solid #f5c0c0"><div class="ct">🔩 Repuestos taller</div><div id="items-rt-c"></div></div>
       <div style="margin-top:8px;background:#fff8f0;border-radius:10px;padding:12px;border:1px solid #f5d9b0"><div class="ct">📦 Repuestos externos</div><div id="items-re-c"></div></div>
-      <div style="margin-top:12px;text-align:center;padding:12px;background:var(--g);border-radius:10px">
+      <div style="margin-top:12px">
+        <div class="fg"><label>Adelanto del cliente ($)</label><input type="number" id="eo-adelanto" value="${o.adelanto_cliente||0}" oninput="recalcOT()" style="border-color:#4CAF50"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+        <div style="background:#e8f5e9;padding:10px;border-radius:9px;text-align:center"><div style="font-size:11px;color:#2e7d32;font-weight:600">ADELANTO</div><div style="font-weight:800;color:#2e7d32" id="ot-adelanto-disp">$0</div></div>
+        <div style="background:#fff3e0;padding:10px;border-radius:9px;text-align:center"><div style="font-size:11px;color:#e65100;font-weight:600">SALDO A COBRAR</div><div style="font-weight:800;color:#e65100" id="ot-saldo-disp">$0</div></div>
+      </div>
+      <div style="margin-top:10px;text-align:center;padding:12px;background:var(--g);border-radius:10px">
         <div style="font-size:11px;color:rgba(255,255,255,.7)">TOTAL</div>
         <div style="font-size:24px;font-weight:900;color:#fff" id="ot-total-disp">${fm(o.total)}</div>
       </div>
@@ -965,14 +992,16 @@ async function editOTModal(id){
 }
 async function saveEditOT(id,pat){
   recalcOT();const tot=sumItems(itemsMO)+sumItems(itemsRT)+sumItems(itemsRE);
-  await api('PUT',`/api/ordenes/${id}`,{estado:$('eo-est').value,tecnico:$('eo-tec').value,trabajos:$('eo-tr').value,items_mano_obra:itemsMO,items_repuestos_taller:itemsRT,items_repuestos_externos:itemsRE,checklist:getChkState(),km_egreso:$('eo-km').value,mano_obra:sumItems(itemsMO),costo_repuestos_taller:sumItems(itemsRT),costo_repuestos_externos:sumItems(itemsRE),total:tot,proximo_aceite:$('eo-pa').value,aceite_usado:$('eo-aceite').value,obs:$('eo-ob').value});
+  const adelanto=parseFloat(($('eo-adelanto')||{value:0}).value)||0;
+  await api('PUT',`/api/ordenes/${id}`,{estado:$('eo-est').value,tecnico:$('eo-tec').value,trabajos:$('eo-tr').value,items_mano_obra:itemsMO,items_repuestos_taller:itemsRT,items_repuestos_externos:itemsRE,checklist:getChkState(),km_egreso:$('eo-km').value,mano_obra:sumItems(itemsMO),costo_repuestos_taller:sumItems(itemsRT),costo_repuestos_externos:sumItems(itemsRE),total:tot,proximo_aceite:$('eo-pa').value,aceite_usado:$('eo-aceite').value,obs:$('eo-ob').value,adelanto_cliente:adelanto});
   cacheClear('/api/ordenes');toast('Guardado ✓');verOT(id);
 }
 async function saveOT(){
   const pat=($('otp')||{value:''}).value.trim().toUpperCase();const tr=($('ottr')||{value:''}).value.trim();const fe=($('otf')||{value:''}).value;
   if(!pat||!tr||!fe){toast('Completá patente, fecha y trabajos');return;}
   recalcOT();const tot=sumItems(itemsMO)+sumItems(itemsRT)+sumItems(itemsRE)+(parseFloat(($('ot-extra')||{value:0}).value)||0);
-  ld(true);const r=await api('POST','/api/ordenes',{patente:pat,fecha:fe,tecnico:$('ott').value,estado:$('ote').value,trabajos:tr,items_mano_obra:itemsMO,items_repuestos_taller:itemsRT,items_repuestos_externos:itemsRE,checklist:getChkState(),km_egreso:$('otkm').value,mano_obra:sumItems(itemsMO),costo_repuestos_taller:sumItems(itemsRT),costo_repuestos_externos:sumItems(itemsRE),total:tot,proximo_aceite:$('otpa').value,aceite_usado:$('ot-aceite').value,obs:$('otob').value});
+  const adelantoNueva=parseFloat(($('ot-adelanto')||{value:0}).value)||0;
+  ld(true);const r=await api('POST','/api/ordenes',{patente:pat,fecha:fe,tecnico:$('ott').value,estado:$('ote').value,trabajos:tr,items_mano_obra:itemsMO,items_repuestos_taller:itemsRT,items_repuestos_externos:itemsRE,checklist:getChkState(),km_egreso:$('otkm').value,mano_obra:sumItems(itemsMO),costo_repuestos_taller:sumItems(itemsRT),costo_repuestos_externos:sumItems(itemsRE),total:tot,proximo_aceite:$('otpa').value,aceite_usado:$('ot-aceite').value,obs:$('otob').value,adelanto_cliente:adelantoNueva});
   ld(false);cacheClear('/api/ordenes');cacheClear('/api/vehiculos');if(!r.ok){toast(r.error);return;}toast('Orden guardada ✓');rOT();
 }
 async function delOT(id){if(!confirm('¿Eliminar?'))return;await api('DELETE',`/api/ordenes/${id}`);cacheClear('/api/ordenes');toast('Eliminada');rOT();}
@@ -1531,6 +1560,9 @@ let newLogoData='';
 async function rPerson(){
   const mc=$('mc');const ti=await api('GET','/api/taller/info');
   mc.innerHTML=`<button class="bk" onclick="goInicio()">← Volver</button><div class="pt">🎨 Personalización</div>
+    <div class="card"><div class="ct">Datos del taller</div>
+      <div class="fg"><label>Nombre del taller</label><input type="text" id="per-nombre" value="${ti.nombre||''}" placeholder="Nombre visible en la app y los PDFs"></div>
+    </div>
     <div class="card"><div class="ct">Colores de la aplicación</div>
       <div class="fg2">
         <div class="fg"><label>Color primario (botones, acentos)</label><input type="color" id="per-pri" value="${ti.color_primario||'#CC0000'}" style="height:48px;cursor:pointer;border-radius:8px"></div>
@@ -1556,7 +1588,7 @@ async function rPerson(){
 }
 function previewLogo(ev){const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{newLogoData=e.target.result;const pv=$('per-logo-prev');if(pv)pv.innerHTML=`<img src="${e.target.result}" style="height:55px;object-fit:contain;border:2px solid var(--brd);border-radius:9px;padding:5px;margin-top:10px">`};r.readAsDataURL(f);}
 async function savePerson(){
-  ld(true);const r=await api('PUT','/api/taller/personalizacion',{color_fondo:$('per-bg').value,color_nav:$('per-nav').value,color_primario:$('per-pri').value,logo:newLogoData||TI.logo||''});ld(false);
+  ld(true);const r=await api('PUT','/api/taller/personalizacion',{color_fondo:$('per-bg').value,color_nav:$('per-nav').value,color_primario:$('per-pri').value,logo:newLogoData||TI.logo||'',nombre:$('per-nombre')?$('per-nombre').value:''});ld(false);
   if(!r.ok){toast('Error al guardar');return;}TI=await api('GET','/api/taller/info');applyPersonalizacion();newLogoData='';toast('Aplicado ✓');
 }
 async function resetPerson(){ld(true);await api('PUT','/api/taller/personalizacion',{color_fondo:'#f5f5f5',color_nav:'#111111',color_primario:'#CC0000',logo:''});ld(false);TI=await api('GET','/api/taller/info');applyPersonalizacion();toast('Restaurado ✓');rPerson();}
@@ -1617,8 +1649,8 @@ function pdfHeader(doc,taller,titulo,num=''){
 
 function pdfLinea(doc,y,label,val,W){
   doc.setFillColor(248,250,252);doc.rect(14,y-4,W-28,7,'F');
-  doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(100,120,150);doc.text(label,16,y);
-  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(30,30,30);doc.text(String(val||'—'),W-14,y,{align:'right'});
+  doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(80,95,120);doc.text(label,16,y);
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(20,20,20);doc.text(String(val||'—'),W-14,y,{align:'right'});
   doc.setDrawColor(220,228,235);doc.line(14,y+2,W-14,y+2);return y+8;
 }
 
@@ -1626,8 +1658,8 @@ function pdfSeccion(doc,y,titulo,color){
   const W=doc.internal.pageSize.getWidth();
   const col=color||getPDFColor();
   doc.setFillColor(col[0],col[1],col[2]);doc.rect(14,y-4,W-28,8,'F');
-  doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(255,255,255);
-  doc.text(titulo,17,y+1);return y+9;
+  doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(255,255,255);
+  doc.text(titulo,17,y+1);return y+10;
 }
 
 function pdfTotal(doc,y,monto,label='TOTAL A COBRAR'){
@@ -1698,7 +1730,7 @@ async function genRem(otId){
   // Descripción de trabajos
   y=pdfCheckPage(doc,y,20,TI2,'REMITO',`OT-${o.numero||'?'}`);
   y=pdfSeccion(doc,y,'Descripción de trabajos');
-  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(30,30,30);
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(20,20,20);
   const lines=doc.splitTextToSize(o.trabajos||'',W-30);
   y=pdfCheckPage(doc,y,lines.length*5+8,TI2,'REMITO',`OT-${o.numero||'?'}`);
   doc.text(lines,16,y);y+=lines.length*5+6;
@@ -1710,7 +1742,7 @@ async function genRem(otId){
     mo.forEach(it=>{
       y=pdfCheckPage(doc,y,10,TI2,'REMITO',`OT-${o.numero||'?'}`);
       doc.setFillColor(248,250,252);doc.rect(14,y-4,W-28,7,'F');
-      doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(30,30,30);
+      doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(20,20,20);
       const descTrunc=doc.splitTextToSize(it.desc||'',W-80)[0];
       doc.text(descTrunc,16,y);
       doc.text((it.cantidad||1)+' × $ '+parseFloat(it.precio||0).toLocaleString('es-AR'),W-14,y,{align:'right'});
@@ -1727,7 +1759,7 @@ async function genRem(otId){
     rt.forEach(it=>{
       y=pdfCheckPage(doc,y,10,TI2,'REMITO',`OT-${o.numero||'?'}`);
       doc.setFillColor(248,250,252);doc.rect(14,y-4,W-28,7,'F');
-      doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(30,30,30);
+      doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(20,20,20);
       const descTrunc=doc.splitTextToSize(it.desc||'',W-80)[0];
       doc.text(descTrunc,16,y);
       doc.text((it.cantidad||1)+' × $ '+parseFloat(it.precio||0).toLocaleString('es-AR'),W-14,y,{align:'right'});
@@ -1740,11 +1772,11 @@ async function genRem(otId){
   // Items repuestos del cliente
   if(re.length){
     y=pdfCheckPage(doc,y,16,TI2,'REMITO',`OT-${o.numero||'?'}`);
-    y=pdfSeccion(doc,y,'Repuestos aportados por el cliente',[180,120,20]);
+    y=pdfSeccion(doc,y,'Repuestos externos al taller',[180,120,20]);
     re.forEach(it=>{
       y=pdfCheckPage(doc,y,10,TI2,'REMITO',`OT-${o.numero||'?'}`);
       doc.setFillColor(255,248,240);doc.rect(14,y-4,W-28,7,'F');
-      doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(30,30,30);
+      doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(20,20,20);
       const descTrunc=doc.splitTextToSize(it.desc||'',W-80)[0];
       doc.text(descTrunc,16,y);
       doc.text((it.cantidad||1)+' × $ '+parseFloat(it.precio||0).toLocaleString('es-AR'),W-14,y,{align:'right'});
@@ -1755,16 +1787,21 @@ async function genRem(otId){
   // Checklist de mantenimientos
   const marcados=Object.keys(chk).filter(k=>chk[k]);
   if(marcados.length){
-    y=pdfCheckPage(doc,y,20,TI2,'REMITO',`OT-${o.numero||'?'}`);
+    y=pdfCheckPage(doc,y,24,TI2,'REMITO',`OT-${o.numero||'?'}`);
     y=pdfSeccion(doc,y,'Mantenimientos realizados');
-    doc.setFont('helvetica','normal');doc.setFontSize(8);
-    let cx=16,iy=y;
+    // Cuadrículas fijas de ancho igual
+    const colW2=44;const rowH2=10;const maxCols=Math.floor((W-28)/colW2);
+    let col2=0,iy=y;
     marcados.forEach(k=>{
-      const txt='✓ '+k;const tw=doc.getTextWidth(txt)+10;
-      if(cx+tw>W-14){cx=16;iy+=7;}
-      doc.setFillColor(230,248,230);doc.roundedRect(cx-2,iy-4,tw,6,1.5,1.5,'F');
-      doc.setTextColor(20,100,20);doc.text(txt,cx,iy);cx+=tw+4;
-    });y=iy+10;
+      const xPos=16+col2*colW2;
+      doc.setFillColor(220,245,220);doc.roundedRect(xPos,iy-4,colW2-3,rowH2,2,2,'F');
+      doc.setDrawColor(100,180,100);doc.roundedRect(xPos,iy-4,colW2-3,rowH2,2,2,'D');
+      doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,100,20);
+      const label=(k||'').normalize('NFC');
+      const trimmed=doc.splitTextToSize(label,colW2-8)[0];
+      doc.text('✓ '+trimmed,xPos+3,iy+2);
+      col2++;if(col2>=maxCols){col2=0;iy+=rowH2+3;}
+    });y=iy+(col2>0?rowH2+5:4);
   }
 
   // Observaciones
@@ -1779,7 +1816,22 @@ async function genRem(otId){
 
   // TOTAL
   y=pdfCheckPage(doc,y,24,TI2,'REMITO',`OT-${o.numero||'?'}`);
-  y+=2;pdfTotal(doc,y,o.total,'TOTAL A COBRAR');
+  y+=2;y=pdfTotal(doc,y,o.total,'TOTAL A COBRAR');
+  // Adelanto y saldo
+  if(o.adelanto_cliente>0){
+    y=pdfCheckPage(doc,y,20,TI2,'REMITO',`OT-${o.numero||'?'}`);
+    const saldo=Math.max(0,(o.total||0)-(o.adelanto_cliente||0));
+    const hw=(W-28)/2;
+    doc.setFillColor(220,245,220);doc.roundedRect(14,y,hw-3,14,3,3,'F');
+    doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(30,100,30);
+    doc.text('ADELANTO RECIBIDO',16,y+5);
+    doc.setFontSize(12);doc.text('$ '+parseFloat(o.adelanto_cliente).toLocaleString('es-AR',{minimumFractionDigits:0}),16+hw/2,y+12,{align:'center'});
+    doc.setFillColor(255,235,200);doc.roundedRect(14+hw+2,y,hw-2,14,3,3,'F');
+    doc.setFontSize(9);doc.setTextColor(180,80,0);
+    doc.text('SALDO A COBRAR',16+hw+4,y+5);
+    doc.setFontSize(12);doc.text('$ '+saldo.toLocaleString('es-AR',{minimumFractionDigits:0}),14+hw+2+hw/2,y+12,{align:'center'});
+    y+=20;
+  }
 
   pdfAddPageNumbers(doc);
   doc.save(`Remito_OT${o.numero||''}_${o.patente}.pdf`);toast('PDF generado ✓');
