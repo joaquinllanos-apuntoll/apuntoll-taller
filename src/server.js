@@ -62,7 +62,11 @@ app.post('/api/registro', async (req,res) => {
 // SUPERADMIN TALLERES
 app.get('/api/admin/talleres', isSA, async (req,res) => {
   try {
-    const ts = await all(`SELECT t.*,(SELECT COUNT(*) FROM vehiculos WHERE taller_id=t.id) as vehiculos,(SELECT last_login FROM users WHERE taller_id=t.id AND role='admin' ORDER BY last_login DESC LIMIT 1) as ultimo_acceso FROM talleres t ORDER BY t.created_at DESC`);
+    const ts = await all(`SELECT t.*, (SELECT COUNT(*) FROM vehiculos WHERE taller_id=t.id) as vehiculos FROM talleres t ORDER BY t.created_at DESC`);
+    // Agregar ultimo_acceso por taller de forma eficiente
+    const logins = await all(`SELECT taller_id, MAX(last_login) as ultimo_acceso FROM users WHERE role='admin' AND taller_id IS NOT NULL GROUP BY taller_id`);
+    const loginMap = {};logins.forEach(l=>loginMap[l.taller_id]=l.ultimo_acceso);
+    ts.forEach(t=>t.ultimo_acceso=loginMap[t.id]||null);
     res.json(ts);
   } catch(e){res.json([]);}
 });
@@ -160,8 +164,12 @@ app.get('/api/taller/info', auth, async (req,res) => {
   res.json(await get('SELECT * FROM talleres WHERE id=?',[req.session.tallerId])||{});
 });
 app.put('/api/taller/personalizacion', isAdm, async (req,res) => {
-  await run('UPDATE talleres SET color_fondo=?,color_nav=?,logo=? WHERE id=?',
-    [req.body.color_fondo||'#f0f0f0',req.body.color_nav||'#111111',req.body.logo||'',req.session.tallerId]);
+  const {color_fondo,color_nav,logo,color_primario,nombre} = req.body;
+  const sets=['color_fondo=?','color_nav=?','logo=?','color_primario=?'];
+  const vals=[color_fondo||'#f0f0f0',color_nav||'#111111',logo||'',color_primario||'#CC0000'];
+  if(nombre&&nombre.trim()){sets.push('nombre=?');vals.push(nombre.trim());}
+  vals.push(req.session.tallerId);
+  await run('UPDATE talleres SET '+sets.join(',')+'  WHERE id=?',vals);
   res.json({ok:true});
 });
 
@@ -237,12 +245,12 @@ app.delete('/api/ingresos/:id', isTaller, async (req,res) => {await run('DELETE 
 app.get('/api/ordenes', isTaller, async (req,res) => res.json(await all('SELECT * FROM ordenes WHERE taller_id=? ORDER BY fecha DESC,created_at DESC',[req.session.tallerId])));
 app.post('/api/ordenes', isTaller, async (req,res) => {
   try {
-    const {patente,fecha,tecnico,estado,trabajos,items_mano_obra,items_repuestos_taller,items_repuestos_externos,checklist,km_egreso,mano_obra,costo_repuestos_taller,costo_repuestos_externos,total,proximo_aceite,aceite_usado,obs} = req.body;
+    const {patente,fecha,tecnico,estado,trabajos,items_mano_obra,items_repuestos_taller,items_repuestos_externos,checklist,km_egreso,mano_obra,costo_repuestos_taller,costo_repuestos_externos,total,proximo_aceite,aceite_usado,obs,adelanto_cliente} = req.body;
     if(!patente||!fecha||!trabajos) return res.json({ok:false,error:'Faltan datos'});
     const pat=patente.toUpperCase().trim();const id=uuidv4();
     const num = await nextNum(req.session.tallerId,'ot');
-    await run('INSERT INTO ordenes (id,taller_id,numero,patente,fecha,tecnico,estado,trabajos,items_mano_obra,items_repuestos_taller,items_repuestos_externos,checklist,km_egreso,mano_obra,costo_repuestos_taller,costo_repuestos_externos,total,proximo_aceite,aceite_usado,obs,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-      [id,req.session.tallerId,num,pat,fecha,tecnico||'',estado||'abierta',trabajos,JSON.stringify(items_mano_obra||[]),JSON.stringify(items_repuestos_taller||[]),JSON.stringify(items_repuestos_externos||[]),JSON.stringify(checklist||{}),km_egreso||0,mano_obra||0,costo_repuestos_taller||0,costo_repuestos_externos||0,total||0,proximo_aceite||0,aceite_usado||'',obs||'',new Date().toISOString()]);
+    await run('INSERT INTO ordenes (id,taller_id,numero,patente,fecha,tecnico,estado,trabajos,items_mano_obra,items_repuestos_taller,items_repuestos_externos,checklist,km_egreso,mano_obra,costo_repuestos_taller,costo_repuestos_externos,total,proximo_aceite,aceite_usado,obs,adelanto_cliente,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      [id,req.session.tallerId,num,pat,fecha,tecnico||'',estado||'abierta',trabajos,JSON.stringify(items_mano_obra||[]),JSON.stringify(items_repuestos_taller||[]),JSON.stringify(items_repuestos_externos||[]),JSON.stringify(checklist||{}),km_egreso||0,mano_obra||0,costo_repuestos_taller||0,costo_repuestos_externos||0,total||0,proximo_aceite||0,aceite_usado||'',obs||'',parseFloat(adelanto_cliente)||0,new Date().toISOString()]);
     if(km_egreso) await run('UPDATE vehiculos SET ultimo_km=? WHERE patente=? AND taller_id=?',[km_egreso,pat,req.session.tallerId]);
     if(proximo_aceite) await run('UPDATE vehiculos SET proximo_aceite=? WHERE patente=? AND taller_id=?',[proximo_aceite,pat,req.session.tallerId]);
     const totalIngreso=(mano_obra||0)+(costo_repuestos_taller||0);
@@ -252,9 +260,9 @@ app.post('/api/ordenes', isTaller, async (req,res) => {
   } catch(e){res.json({ok:false,error:e.message});}
 });
 app.put('/api/ordenes/:id', isTaller, async (req,res) => {
-  const {estado,tecnico,trabajos,items_mano_obra,items_repuestos_taller,items_repuestos_externos,checklist,km_egreso,mano_obra,costo_repuestos_taller,costo_repuestos_externos,total,proximo_aceite,aceite_usado,obs} = req.body;
-  await run('UPDATE ordenes SET estado=?,tecnico=?,trabajos=?,items_mano_obra=?,items_repuestos_taller=?,items_repuestos_externos=?,checklist=?,km_egreso=?,mano_obra=?,costo_repuestos_taller=?,costo_repuestos_externos=?,total=?,proximo_aceite=?,aceite_usado=?,obs=? WHERE id=? AND taller_id=?',
-    [estado,tecnico||'',trabajos,JSON.stringify(items_mano_obra||[]),JSON.stringify(items_repuestos_taller||[]),JSON.stringify(items_repuestos_externos||[]),JSON.stringify(checklist||{}),km_egreso||0,mano_obra||0,costo_repuestos_taller||0,costo_repuestos_externos||0,total||0,proximo_aceite||0,aceite_usado||'',obs||'',req.params.id,req.session.tallerId]);
+  const {estado,tecnico,trabajos,items_mano_obra,items_repuestos_taller,items_repuestos_externos,checklist,km_egreso,mano_obra,costo_repuestos_taller,costo_repuestos_externos,total,proximo_aceite,aceite_usado,obs,adelanto_cliente} = req.body;
+  await run('UPDATE ordenes SET estado=?,tecnico=?,trabajos=?,items_mano_obra=?,items_repuestos_taller=?,items_repuestos_externos=?,checklist=?,km_egreso=?,mano_obra=?,costo_repuestos_taller=?,costo_repuestos_externos=?,total=?,proximo_aceite=?,aceite_usado=?,obs=?,adelanto_cliente=? WHERE id=? AND taller_id=?',
+    [estado,tecnico||'',trabajos,JSON.stringify(items_mano_obra||[]),JSON.stringify(items_repuestos_taller||[]),JSON.stringify(items_repuestos_externos||[]),JSON.stringify(checklist||{}),km_egreso||0,mano_obra||0,costo_repuestos_taller||0,costo_repuestos_externos||0,total||0,proximo_aceite||0,aceite_usado||'',obs||'',parseFloat(adelanto_cliente)||0,req.params.id,req.session.tallerId]);
   res.json({ok:true});
 });
 app.delete('/api/ordenes/:id', isTaller, async (req,res) => {await run('DELETE FROM ordenes WHERE id=? AND taller_id=?',[req.params.id,req.session.tallerId]);res.json({ok:true});});
@@ -368,7 +376,7 @@ app.post('/api/admin/talleres/:id/renovar', isSA, async (req,res) => {
   if(!t) return res.json({ok:false,error:'No encontrado'});
   await run('UPDATE talleres SET suscripcion_hasta=?,suscripcion_monto=? WHERE id=?',[suscripcion_hasta,parseFloat(monto)||0,req.params.id]);
   if(monto && parseFloat(monto)>0) {
-    await run('INSERT INTO movimientos_admin (id,tipo,fecha,categoria,monto,descripcion,taller_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)',
+    await run('INSERT INTO movimientos_admin (id,tipo,fecha,categoria,monto,descripcion,taller_id,created_at) VALUES (?,?,?,?,?,?,?,?)',
       [uuidv4(),'ingreso',new Date().toISOString().split('T')[0],'suscripcion',parseFloat(monto),'Suscripción '+t.nombre,req.params.id,new Date().toISOString()]);
   }
   res.json({ok:true});
