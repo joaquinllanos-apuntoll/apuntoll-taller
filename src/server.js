@@ -249,7 +249,7 @@ app.post('/api/ordenes', isTaller, async (req,res) => {
     if(!patente||!fecha||!trabajos) return res.json({ok:false,error:'Faltan datos'});
     const pat=patente.toUpperCase().trim();const id=uuidv4();
     const num = await nextNum(req.session.tallerId,'ot');
-    await run('INSERT INTO ordenes (id,taller_id,numero,patente,fecha,tecnico,estado,trabajos,items_mano_obra,items_repuestos_taller,items_repuestos_externos,checklist,km_egreso,mano_obra,costo_repuestos_taller,costo_repuestos_externos,total,proximo_aceite,aceite_usado,obs,adelanto_cliente,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+    await run('INSERT INTO ordenes (id,taller_id,numero,patente,fecha,tecnico,estado,trabajos,items_mano_obra,items_repuestos_taller,items_repuestos_externos,checklist,km_egreso,mano_obra,costo_repuestos_taller,costo_repuestos_externos,total,proximo_aceite,aceite_usado,obs,adelanto_cliente,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
       [id,req.session.tallerId,num,pat,fecha,tecnico||'',estado||'abierta',trabajos,JSON.stringify(items_mano_obra||[]),JSON.stringify(items_repuestos_taller||[]),JSON.stringify(items_repuestos_externos||[]),JSON.stringify(checklist||{}),km_egreso||0,mano_obra||0,costo_repuestos_taller||0,costo_repuestos_externos||0,total||0,proximo_aceite||0,aceite_usado||'',obs||'',parseFloat(adelanto_cliente)||0,new Date().toISOString()]);
     if(km_egreso) await run('UPDATE vehiculos SET ultimo_km=? WHERE patente=? AND taller_id=?',[km_egreso,pat,req.session.tallerId]);
     if(proximo_aceite) await run('UPDATE vehiculos SET proximo_aceite=? WHERE patente=? AND taller_id=?',[proximo_aceite,pat,req.session.tallerId]);
