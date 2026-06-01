@@ -319,7 +319,8 @@ async function rAdmin(){
         <tbody id="tbody-t">${rTablaTalleres(ts)}</tbody>
       </table></div>
     </div>`;
-  $('tbl-t')._ts=ts;
+  if($('tbl-t'))$('tbl-t')._ts=ts;
+  ld(false); // Asegurar que el loader no queda colgado
 }
 function rTablaTalleres(ts){
   if(!ts.filter(t=>!t.pendiente).length)return`<tr><td colspan="7" style="text-align:center;color:var(--t2);padding:20px">Sin talleres</td></tr>`;
@@ -916,9 +917,14 @@ async function otAuto(){
   else if(info)info.style.display='none';
 }
 function otFill(p,cid){
-  if($('otp'))$('otp').value=p;
-  const ac=$('otac');if(ac)ac.classList.remove('show'); // FIX: cerrar dropdown al seleccionar
-  otAuto();
+  if($('otp')){$('otp').value=p;$('otp').blur();}
+  const ac=$('otac');if(ac){ac.classList.remove('show');ac.innerHTML='';}
+  apiCached('/api/vehiculos').then(VS=>{
+    const v=VS.find(x=>x.patente===p);
+    const info=$('otai');
+    if(v&&info){info.style.display='block';info.innerHTML=`✓ <strong>${v.patente}</strong> — ${[v.marca,v.modelo].filter(Boolean).join(' ')}${v.cliente_nombre?' · 👤 '+v.cliente_nombre:''}${v.proximo_aceite?' · 🛢 Próx. aceite: '+parseInt(v.proximo_aceite).toLocaleString()+' km':''}`;
+    }else if(info)info.style.display='none';
+  });
 }
 async function verOT(id){
   const OS=await api('GET','/api/ordenes');const o=OS.find(x=>x.id===id);if(!o)return;
@@ -1057,11 +1063,27 @@ function planView(v){
     planMostrarSemana(lunes);
   }
 }
+function planNavDia(delta){
+  const fi=$('plan-fecha');if(!fi)return;
+  const d=new Date(fi.value+'T12:00:00');d.setDate(d.getDate()+delta);
+  fi.value=d.toISOString().split('T')[0];planMostrarDia(fi.value);
+}
 function planMostrarDia(fecha){
   const lista=$('plan-lista');if(!lista)return;
   const tareas=plannerTareas.filter(t=>t.fecha===fecha).sort((a,b)=>a.hora.localeCompare(b.hora));
-  if(!tareas.length){lista.innerHTML=`<div style="text-align:center;padding:30px;color:var(--t2)"><div style="font-size:36px;margin-bottom:8px">📭</div>Sin tareas para este día</div>`;return;}
-  lista.innerHTML=tareas.map((t,i)=>`<div class="card" style="border-left:4px solid ${t.completada?'#4CAF50':t.cancelada?'#ccc':'var(--g)'}">
+  // Nav de fecha
+  const [anio,mes,dia]=fecha.split('-');
+  const meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const labelFecha=`${parseInt(dia)} de ${meses[parseInt(mes)-1]} ${anio}`;
+  const navHtml=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;background:#f8fafc;border-radius:10px;padding:8px 12px;border:1px solid var(--brd)">
+    <button class="btn sm" onclick="planNavDia(-1)">◀</button>
+    <span style="font-weight:700;font-size:13px">${labelFecha}</span>
+    <button class="btn sm" onclick="planNavDia(1)">▶</button>
+  </div>`;
+  if(!tareas.length){lista.innerHTML=navHtml+`<div style="text-align:center;padding:30px;color:var(--t2)"><div style="font-size:36px;margin-bottom:8px">📭</div>Sin tareas para este día</div>`;return;}
+  lista.innerHTML=navHtml+tareas.map((t,i)=>{
+    const idx=plannerTareas.indexOf(t);
+    return `<div class="card" style="border-left:4px solid ${t.completada?'#4CAF50':t.cancelada?'#ccc':'var(--g)'}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
       <div style="flex:1">
         <div style="font-size:12px;color:var(--t2);font-weight:700">${t.hora}${t.horafin?' → '+t.horafin:''} ${t.empleado?'· '+t.empleado:''}</div>
@@ -1069,15 +1091,48 @@ function planMostrarDia(fecha){
         ${t.patente?`<div style="font-size:11px;color:var(--t2);margin-top:2px">🚗 ${t.patente}</div>`:''}
       </div>
       <div style="display:flex;flex-direction:column;gap:5px">
-        ${!t.completada&&!t.cancelada?`<button class="btn sm primary" onclick="planToggle(${plannerTareas.indexOf(t)},'completada')" title="Completar">✓</button>`:''}
-        ${!t.cancelada&&!t.completada?`<button class="btn sm" onclick="planToggle(${plannerTareas.indexOf(t)},'cancelada')" title="Cancelar">✕</button>`:''}
-        ${t.completada||t.cancelada?`<button class="btn sm warn" onclick="planRestaurar(${plannerTareas.indexOf(t)})" title="Restaurar">↩</button>`:''}
-        <button class="btn sm danger" onclick="planEliminar(${plannerTareas.indexOf(t)},this)" title="Eliminar">🗑</button>
+        ${!t.completada&&!t.cancelada?`<button class="btn sm primary" onclick="planToggle(${idx},'completada')" title="Completar">✓</button>`:''}
+        ${!t.cancelada&&!t.completada?`<button class="btn sm" onclick="planToggle(${idx},'cancelada')" title="Cancelar">✕</button>`:''}
+        ${t.completada||t.cancelada?`<button class="btn sm warn" onclick="planRestaurar(${idx})" title="Restaurar">↩</button>`:''}
+        <button class="btn sm warn" onclick="planEditarModal(${idx})" title="Editar">✏️</button>
+        <button class="btn sm danger" onclick="planEliminar(${idx},this)" title="Eliminar">🗑</button>
       </div>
     </div>
     ${t.completada?'<div style="font-size:11px;color:#4CAF50;margin-top:4px;font-weight:700">✓ Completada</div>':''}
     ${t.cancelada?'<div style="font-size:11px;color:#999;margin-top:4px;font-weight:700">✕ Cancelada</div>':''}
-  </div>`).join('');
+  </div>`;}).join('');
+}
+function planEditarModal(idx){
+  if(idx<0||idx>=plannerTareas.length)return;
+  const t=plannerTareas[idx];
+  const card=document.createElement('div');
+  card.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px';
+  card.innerHTML=`<div style="background:#fff;border-radius:14px;padding:22px;max-width:460px;width:100%">
+    <div class="ct">✏️ Editar tarea</div>
+    <div class="fg2">
+      <div class="fg"><label>Fecha</label><input type="date" id="pe-fe" value="${t.fecha}"></div>
+      <div class="fg"><label>Hora inicio</label><input type="time" id="pe-ho" value="${t.hora}"></div>
+      <div class="fg"><label>Hora fin</label><input type="time" id="pe-hf" value="${t.horafin||''}"></div>
+      <div class="fg"><label>Empleado/Técnico</label><input type="text" id="pe-emp" value="${t.empleado||''}"></div>
+      <div class="fg one"><label>Descripción *</label><textarea id="pe-des">${t.descripcion||''}</textarea></div>
+      <div class="fg"><label>Patente</label><input type="text" id="pe-pat" value="${t.patente||''}" style="text-transform:uppercase"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn primary" onclick="planGuardarEdicion(${idx},this.closest('div[style*=fixed]'))">Guardar</button>
+      <button class="btn" onclick="this.closest('div[style*=fixed]').remove()">Cancelar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(card);
+}
+function planGuardarEdicion(idx,overlay){
+  if(idx<0||idx>=plannerTareas.length)return;
+  const des=($('pe-des')||{value:''}).value.trim();
+  const fe=($('pe-fe')||{value:''}).value;
+  const ho=($('pe-ho')||{value:''}).value;
+  if(!des||!fe||!ho){toast('Descripción, fecha y hora son obligatorias');return;}
+  plannerTareas[idx]={...plannerTareas[idx],fecha:fe,hora:ho,horafin:($('pe-hf')||{value:''}).value,empleado:($('pe-emp')||{value:''}).value.trim(),descripcion:des,patente:($('pe-pat')||{value:''}).value.toUpperCase().trim()};
+  plannerSave();overlay.remove();toast('Tarea actualizada ✓');
+  const fi=$('plan-fecha');if(fi){fi.value=fe;planMostrarDia(fe);}
 }
 function planMostrarSemana(lunes){
   const c=$('plan-semana-c');if(!c)return;
@@ -1088,8 +1143,10 @@ function planMostrarSemana(lunes){
     const fStr=fecha.toISOString().split('T')[0];
     const tareas=plannerTareas.filter(t=>t.fecha===fStr);
     const esHoy=fStr===new Date().toISOString().split('T')[0];
+    const mesesS=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
     html+=`<div style="background:${esHoy?'var(--g)':'#f8fafc'};color:${esHoy?'#fff':'var(--t)'};border-radius:10px;padding:10px;min-height:120px;border:1px solid var(--brd)">
-      <div style="font-weight:800;font-size:12px;margin-bottom:6px">${dias[d]} ${fecha.getDate()}</div>
+      <div style="font-weight:800;font-size:12px;margin-bottom:2px">${dias[d]} ${fecha.getDate()}</div>
+      <div style="font-size:10px;opacity:.7;margin-bottom:6px">${mesesS[fecha.getMonth()]} ${fecha.getFullYear()}</div>
       ${tareas.slice(0,4).map(t=>`<div style="font-size:10px;background:${t.completada?'rgba(76,175,80,.2)':t.cancelada?'rgba(200,200,200,.3)':'rgba(255,255,255,.85)'};border-radius:5px;padding:3px 5px;margin-bottom:3px;${esHoy?'color:#333':''}">
         <span style="font-weight:700">${t.hora}</span> ${(t.descripcion||'').substring(0,18)}${t.descripcion&&t.descripcion.length>18?'...':''}
       </div>`).join('')}
@@ -1097,8 +1154,12 @@ function planMostrarSemana(lunes){
     </div>`;
   }
   html+='</div>';
-  html+=`<div style="display:flex;gap:8px;margin-top:10px;justify-content:center">
+  const viernes=new Date(lunes);viernes.setDate(lunes.getDate()+6);
+  const mesesLbl=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const lblSemana=lunes.getMonth()===viernes.getMonth()?`${mesesLbl[lunes.getMonth()]} ${lunes.getFullYear()}`:`${mesesLbl[lunes.getMonth()]} — ${mesesLbl[viernes.getMonth()]} ${viernes.getFullYear()}`;
+  html+=`<div style="display:flex;gap:8px;margin-top:10px;justify-content:space-between;align-items:center;flex-wrap:wrap">
     <button class="btn sm" onclick="planSemanaAnterior('${lunes.toISOString().split('T')[0]}')">◀ Anterior</button>
+    <span style="font-weight:700;font-size:13px">${lblSemana}</span>
     <button class="btn sm" onclick="planSemanaSiguiente('${lunes.toISOString().split('T')[0]}')">Siguiente ▶</button>
   </div>`;
   c.innerHTML=html;
@@ -1110,6 +1171,7 @@ function planAgregar(){
   const fe=($('pt-fe')||{value:''}).value;
   const ho=($('pt-ho')||{value:''}).value;
   if(!des||!fe||!ho){toast('Descripción, fecha y hora son obligatorias');return;}
+  // Fix timezone: usar fecha tal cual viene del input (YYYY-MM-DD) sin conversión UTC
   plannerTareas.push({id:Date.now(),fecha:fe,hora:ho,horafin:($('pt-hf')||{value:''}).value,empleado:($('pt-emp')||{value:''}).value.trim(),descripcion:des,patente:($('pt-pat')||{value:''}).value.toUpperCase().trim(),completada:false,cancelada:false});
   plannerSave();
   toast('Tarea agregada ✓');
@@ -1629,22 +1691,27 @@ function pdfCheckPage(doc,y,needed,taller,titulo,subtitulo){
 function pdfHeader(doc,taller,titulo,num=''){
   const W=doc.internal.pageSize.getWidth();
   const [cr,cg,cb]=getPDFColor();
-  doc.setFillColor(cr,cg,cb);doc.rect(0,0,W,32,'F');
+  // Header más alto para dar espacio
+  doc.setFillColor(cr,cg,cb);doc.rect(0,0,W,42,'F');
+  // Logo más grande y con más espacio
   const logoSrc=(taller.logo&&taller.logo.length>10)?taller.logo:null;
-  if(logoSrc){try{doc.addImage(logoSrc,'PNG',8,5,22,22);}catch(e){}}
-  const lx=logoSrc?34:14;
-  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.setTextColor(255,255,255);
-  doc.text(taller.nombre||'Taller',lx,13);
-  doc.setFontSize(8);doc.setFont('helvetica','normal');doc.setTextColor(255,210,210);
-  if(taller.direccion)doc.text(taller.direccion,lx,19);
-  let contactoY=taller.direccion?25:19;
-  const contacto=[taller.telefono?'Tel: '+taller.telefono:null,taller.email||null].filter(Boolean).join('   ');
-  if(contacto)doc.text(contacto,lx,contactoY);
+  if(logoSrc){try{doc.addImage(logoSrc,'PNG',6,4,32,34);}catch(e){}}
+  const lx=logoSrc?42:12;
+  // Nombre del taller — grande y legible
   doc.setFont('helvetica','bold');doc.setFontSize(16);doc.setTextColor(255,255,255);
-  doc.text(titulo,W-10,14,{align:'right'});
-  if(num){doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(255,220,220);doc.text(num,W-10,23,{align:'right'});}
-  doc.setTextColor(30,30,30);
-  return 40;
+  doc.text(taller.nombre||'Taller',lx,14);
+  // Dirección
+  if(taller.direccion){doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(255,220,220);doc.text(taller.direccion,lx,22);}
+  // Teléfono + email
+  const contacto=[taller.telefono?'Tel: '+taller.telefono:null,taller.email||null].filter(Boolean).join('   ');
+  if(contacto){doc.setFontSize(9);doc.setTextColor(255,230,230);doc.text(contacto,lx,30);}
+  // Título del documento — grande y destacado
+  doc.setFont('helvetica','bold');doc.setFontSize(20);doc.setTextColor(255,255,255);
+  doc.text(titulo,W-10,17,{align:'right'});
+  // Número — bien visible
+  if(num){doc.setFontSize(13);doc.setFont('helvetica','bold');doc.setTextColor(255,230,180);doc.text(num,W-10,30,{align:'right'});}
+  doc.setTextColor(20,20,20);
+  return 50;
 }
 
 function pdfLinea(doc,y,label,val,W){
@@ -1787,21 +1854,24 @@ async function genRem(otId){
   // Checklist de mantenimientos
   const marcados=Object.keys(chk).filter(k=>chk[k]);
   if(marcados.length){
-    y=pdfCheckPage(doc,y,24,TI2,'REMITO',`OT-${o.numero||'?'}`);
+    const rowHchk=10;const needed=marcados.length*rowHchk+20;
+    y=pdfCheckPage(doc,y,needed,TI2,'REMITO',`OT-${o.numero||'?'}`);
     y=pdfSeccion(doc,y,'Mantenimientos realizados');
-    // Cuadrículas fijas de ancho igual
-    const colW2=44;const rowH2=10;const maxCols=Math.floor((W-28)/colW2);
-    let col2=0,iy=y;
     marcados.forEach(k=>{
-      const xPos=16+col2*colW2;
-      doc.setFillColor(220,245,220);doc.roundedRect(xPos,iy-4,colW2-3,rowH2,2,2,'F');
-      doc.setDrawColor(100,180,100);doc.roundedRect(xPos,iy-4,colW2-3,rowH2,2,2,'D');
-      doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(20,100,20);
+      y=pdfCheckPage(doc,y,rowHchk+2,TI2,'REMITO',`OT-${o.numero||'?'}`);
+      // Caja de fondo
+      doc.setFillColor(235,250,235);doc.roundedRect(14,y-5,W-28,rowHchk,2,2,'F');
+      doc.setDrawColor(100,180,100);doc.roundedRect(14,y-5,W-28,rowHchk,2,2,'D');
+      // Checkbox verde tildado
+      doc.setFillColor(34,197,94);doc.roundedRect(17,y-3.5,6,6,1,1,'F');
+      doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(255,255,255);
+      doc.text('✓',18.2,y+1);
+      // Texto del item
+      doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(20,20,20);
       const label=(k||'').normalize('NFC');
-      const trimmed=doc.splitTextToSize(label,colW2-8)[0];
-      doc.text('✓ '+trimmed,xPos+3,iy+2);
-      col2++;if(col2>=maxCols){col2=0;iy+=rowH2+3;}
-    });y=iy+(col2>0?rowH2+5:4);
+      doc.text(label,26,y+1);
+      y+=rowHchk+2;
+    });y+=4;
   }
 
   // Observaciones
