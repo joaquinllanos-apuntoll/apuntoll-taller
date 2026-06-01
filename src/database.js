@@ -2,8 +2,11 @@ const { createClient } = require('@libsql/client');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 
-const rawUrl = (process.env.TURSO_URL || '').trim().replace(/\s+/g, '');
-const rawToken = (process.env.TURSO_TOKEN || '').trim().replace(/\s+/g, '');
+const rawUrl = (process.env.TURSO_URL || '').trim().replace(/\s+/g, '').replace(/['"]/g, '');
+const rawToken = (process.env.TURSO_TOKEN || '').trim().replace(/\s+/g, '').replace(/['"]/g, '');
+
+console.log('DEBUG TURSO_URL:', JSON.stringify(process.env.TURSO_URL));
+console.log('DEBUG rawUrl:', JSON.stringify(rawUrl));
 
 if (!rawUrl) {
   console.error('TURSO_URL no configurada');
