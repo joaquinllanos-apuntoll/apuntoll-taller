@@ -359,27 +359,33 @@ function renovarModal(id,nom,montoActual){
 async function renovarSus(id,overlay){
   const mo=($('ren-mo')||{value:''}).value;const fe=($('ren-fe')||{value:''}).value;
   if(!fe){toast('Ingresá la fecha de vencimiento');return;}
-  ld(true);await api('POST',`/api/admin/talleres/${id}/renovar`,{monto:mo,suscripcion_hasta:fe});ld(false);
-  overlay.remove();toast('Suscripción renovada ✓');rAdmin();
+  try{
+    await api('POST',`/api/admin/talleres/${id}/renovar`,{monto:mo,suscripcion_hasta:fe});
+    overlay.remove();toast('Suscripción renovada ✓');
+  }catch(e){toast('Error al renovar');}
+  ld(false);rAdmin();
 }
 async function aprobarTaller(id){
   const sus=($(`sus-${id}`)||{value:''}).value;
   const mo=($(`sm-${id}`)||{value:''}).value;
-  ld(true);
-  await api('PUT',`/api/admin/talleres/${id}/aprobar`,{suscripcion_hasta:sus});
-  if(mo&&parseFloat(mo)>0) await api('POST',`/api/admin/talleres/${id}/renovar`,{monto:mo,suscripcion_hasta:sus});
-  ld(false);toast('Taller aprobado ✓');rAdmin();
+  try{
+    await api('PUT',`/api/admin/talleres/${id}/aprobar`,{suscripcion_hasta:sus});
+    if(mo&&parseFloat(mo)>0) await api('POST',`/api/admin/talleres/${id}/renovar`,{monto:mo,suscripcion_hasta:sus});
+    toast('Taller aprobado ✓');
+  }catch(e){toast('Error al aprobar');}
+  ld(false);rAdmin();
 }
 async function crearTaller(){
   const n=$('ntn').value.trim(),e=$('nte').value.trim(),p=$('ntp').value;
   if(!n||!e||!p){toast('Completá nombre, email y contraseña');return;}
-  ld(true);const r=await api('POST','/api/admin/talleres',{nombre:n,email:e,password:p,telefono:$('nttel').value,direccion:$('ntd').value,nombre_dueno:$('ntdno').value,suscripcion_hasta:$('ntsus').value,suscripcion_monto:parseFloat($('ntsm').value)||0});ld(false);
-  if(!r.ok){toast(r.error);return;}
+  const r=await api('POST','/api/admin/talleres',{nombre:n,email:e,password:p,telefono:$('nttel').value,direccion:$('ntd').value,nombre_dueno:$('ntdno').value,suscripcion_hasta:$('ntsus').value,suscripcion_monto:parseFloat($('ntsm').value)||0});
+  ld(false);
+  if(!r||!r.ok){toast((r&&r.error)||'Error al crear');return;}
   const id=r.id;const mo=$('ntsm').value;
   if(mo&&parseFloat(mo)>0&&$('ntsus').value) await api('POST',`/api/admin/talleres/${id}/renovar`,{monto:mo,suscripcion_hasta:$('ntsus').value});
-  toast('Taller creado ✓');rAdmin();
+  toast('Taller creado ✓');ld(false);rAdmin();
 }
-async function toggleT(id,nom,act){if(!confirm(`¿${act?'Suspender':'Activar'} "${nom}"?`))return;await api('PUT',`/api/admin/talleres/${id}/toggle`);toast(`${act?'Suspendido':'Activado'} ✓`);rAdmin();}
+async function toggleT(id,nom,act){if(!confirm(`¿${act?'Suspender':'Activar'} "${nom}"?`))return;try{await api('PUT',`/api/admin/talleres/${id}/toggle`);toast(`${act?'Suspendido':'Activado'} ✓`);}catch(e){toast('Error');}ld(false);rAdmin();}
 async function editarTaller(id){
   const ts=await api('GET','/api/admin/talleres');const t=ts.find(x=>x.id===id);if(!t)return;
   const us=await api('GET',`/api/admin/talleres/${id}/users`);
