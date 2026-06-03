@@ -262,13 +262,14 @@ function showSec(s){
 // SUPERADMIN
 async function rAdmin(){
   const mc=$('mc');
-  // Asegurar que el overlay global NO bloquea el panel admin
-  ld(false);
+  // NUNCA usar ld() en el panel admin — usa spinner inline propio
+  // Apagar cualquier loader global que pudiera haber quedado activo
+  $('ld').style.display='none';
   mc.innerHTML=`<div class="pt">🏢 Panel de administración</div><div id="adm-c"><div style="text-align:center;padding:40px;color:var(--t2)"><div class="sp" style="margin:0 auto 14px"></div>Cargando talleres...</div></div>`;
   let ts=[];
   try{ ts=await api('GET','/api/admin/talleres'); }catch(e){ ts=[]; }
   if(!Array.isArray(ts))ts=[];
-  ld(false); // Segunda llamada por si acaso quedó colgado
+  $('ld').style.display='none'; // Doble seguro
   const pend=ts.filter(t=>t.pendiente);
   const ac=$('adm-c');
   if(!ac)return;
@@ -323,7 +324,7 @@ async function rAdmin(){
       </table></div>
     </div>`;
   if($('tbl-t'))$('tbl-t')._ts=ts;
-  ld(false); // Asegurar que el loader no queda colgado
+  $('ld').style.display='none'; // Triple seguro — nunca dejar el overlay activo en admin
 }
 function rTablaTalleres(ts){
   if(!ts.filter(t=>!t.pendiente).length)return`<tr><td colspan="7" style="text-align:center;color:var(--t2);padding:20px">Sin talleres</td></tr>`;
@@ -359,21 +360,25 @@ function renovarModal(id,nom,montoActual){
 async function renovarSus(id,overlay){
   const mo=($('ren-mo')||{value:''}).value;const fe=($('ren-fe')||{value:''}).value;
   if(!fe){toast('Ingresá la fecha de vencimiento');return;}
+  $('ld').style.display='none';
   try{
     await api('POST',`/api/admin/talleres/${id}/renovar`,{monto:mo,suscripcion_hasta:fe});
     overlay.remove();toast('Suscripción renovada ✓');
   }catch(e){toast('Error al renovar');}
-  ld(false);rAdmin();
+  $('ld').style.display='none';
+  rAdmin();
 }
 async function aprobarTaller(id){
   const sus=($(`sus-${id}`)||{value:''}).value;
   const mo=($(`sm-${id}`)||{value:''}).value;
+  $('ld').style.display='none';
   try{
     await api('PUT',`/api/admin/talleres/${id}/aprobar`,{suscripcion_hasta:sus});
     if(mo&&parseFloat(mo)>0) await api('POST',`/api/admin/talleres/${id}/renovar`,{monto:mo,suscripcion_hasta:sus});
     toast('Taller aprobado ✓');
   }catch(e){toast('Error al aprobar');}
-  ld(false);rAdmin();
+  $('ld').style.display='none';
+  rAdmin();
 }
 async function crearTaller(){
   const n=$('ntn').value.trim(),e=$('nte').value.trim(),p=$('ntp').value;
@@ -385,7 +390,7 @@ async function crearTaller(){
   if(mo&&parseFloat(mo)>0&&$('ntsus').value) await api('POST',`/api/admin/talleres/${id}/renovar`,{monto:mo,suscripcion_hasta:$('ntsus').value});
   toast('Taller creado ✓');ld(false);rAdmin();
 }
-async function toggleT(id,nom,act){if(!confirm(`¿${act?'Suspender':'Activar'} "${nom}"?`))return;try{await api('PUT',`/api/admin/talleres/${id}/toggle`);toast(`${act?'Suspendido':'Activado'} ✓`);}catch(e){toast('Error');}ld(false);rAdmin();}
+async function toggleT(id,nom,act){if(!confirm(`¿${act?'Suspender':'Activar'} "${nom}"?`))return;$('ld').style.display='none';try{await api('PUT',`/api/admin/talleres/${id}/toggle`);toast(`${act?'Suspendido':'Activado'} ✓`);}catch(e){toast('Error');}$('ld').style.display='none';rAdmin();}
 async function editarTaller(id){
   const ts=await api('GET','/api/admin/talleres');const t=ts.find(x=>x.id===id);if(!t)return;
   const us=await api('GET',`/api/admin/talleres/${id}/users`);
@@ -417,7 +422,7 @@ async function guardarET(id){
   if(r.ok){toast('Guardado ✓');rAdmin();}else toast(r.error);
 }
 async function resetPT(id){const np=($('et-ps')||{value:''}).value;if(!np||np.length<4){toast('Contraseña muy corta');return;}const r=await api('PUT',`/api/admin/talleres/${id}/password`,{password:np});if(r.ok)toast('Contraseña actualizada ✓');else toast(r.error);}
-async function delT(id,nom){if(!confirm(`¿ELIMINAR "${nom}"?`))return;if(!confirm('Confirmación definitiva.'))return;await api('DELETE',`/api/admin/talleres/${id}`);toast('Eliminado');rAdmin();}
+async function delT(id,nom){if(!confirm(`¿ELIMINAR "${nom}"?`))return;if(!confirm('Confirmación definitiva.'))return;$('ld').style.display='none';await api('DELETE',`/api/admin/talleres/${id}`);toast('Eliminado');$('ld').style.display='none';rAdmin();}
 
 // ADMIN ECO
 async function rAdminEco(){
